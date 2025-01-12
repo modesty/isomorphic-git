@@ -109,6 +109,48 @@ const stashChanges = async (
   expect(mStatus).toBe('unmodified')
 }
 
+describe('common stash', () => {
+  it('stash example with untracked but staged', async () => {
+    const { fs, dir, gitdir } = await makeFixtureStash('common-stash')
+
+    // add user to config
+    await addUserConfig(fs, dir, gitdir)
+
+    const aContent = await fs.read(`${dir}/a.txt`)
+    const uContent = 'console.log("untracked but staged changes - u")'
+    await fs.write(`${dir}/a.txt`, 'staged changes - a')
+    await fs.write(`${dir}/u.js`, uContent)
+
+    await add({ fs, dir, gitdir, filepath: ['a.txt', 'u.js'] })
+    let aStatus = await status({ fs, dir, gitdir, filepath: 'a.txt' })
+    expect(aStatus).toBe('modified')
+
+    let uStatus = await status({ fs, dir, gitdir, filepath: 'u.js' })
+    expect(uStatus).toBe('added') // untracked file, staged
+
+    let error = null
+    try {
+      await stash({ fs, dir, gitdir, message: 'stash example test' })
+
+      const aContentAfterStash = await fs.read(`${dir}/a.txt`)
+      expect(aContentAfterStash.toString()).toEqual(aContent.toString())
+
+      const uStatusS = await status({ fs, dir, gitdir, filepath: 'u.js' })
+      expect(uStatusS).toBe('absent') // file not present in HEAD commit, staging area, or working dir
+
+      await stash({ fs, dir, gitdir, op: 'pop' })
+    } catch (e) {
+      error = e
+    }
+
+    expect(error).toBeNull()
+    aStatus = await status({ fs, dir, gitdir, filepath: 'a.txt' })
+    expect(aStatus).toBe('modified')
+    uStatus = await status({ fs, dir, gitdir, filepath: 'u.js' })
+    expect(uStatus).toBe('added') // untracked file, staged
+  })
+})
+
 describe('abort stash', () => {
   it('stash without user', async () => {
     const { fs, dir, gitdir } = await makeFixtureStash('test-stash')
